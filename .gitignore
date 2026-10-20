@@ -1,0 +1,74 @@
+# Secrets and environment
+.env
+.env.*
+!.env.example
+!.env.test.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+*.so
+*.egg-info/
+.eggs/
+build/
+dist/
+wheels/
+pip-wheel-metadata/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Testing and coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml/
+
+# Type checking and linting
+.mypy_cache/
+.ruff_cache/
+
+# IDEs and operating systems
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# User documents and vector databases
+data/documents/*
+!data/documents/.gitkeep
+
+data/vector_store/*
+!data/vector_store/.gitkeep
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Local model weights and caches
+models/
+model_cache/
+.cache/huggingface/
+
+# Secrets, certificates and private keys
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Build and runtime artifacts
+dist/
