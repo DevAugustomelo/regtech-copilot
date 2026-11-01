@@ -12,6 +12,7 @@ class PromptMessages:
 
     system_prompt: str
     user_prompt: str
+    sources: tuple[VectorSearchResult, ...]
 
 
 class PromptBuilder:
@@ -58,6 +59,7 @@ instead of generating an unsupported regulatory answer.
         if not query.strip():
             raise ValueError("Query cannot be empty.")
 
+        included_results: list[VectorSearchResult] = []
         sources: list[dict[str, str | int | float]] = []
         context_length = 0
 
@@ -103,6 +105,8 @@ instead of generating an unsupported regulatory answer.
             sources.append(source)
             context_length += len(serialized_source)
 
+            included_results.append(result)
+
         context = json.dumps(
             sources,
             ensure_ascii=False,
@@ -129,4 +133,5 @@ If the evidence is insufficient, explicitly say so.
         return PromptMessages(
             system_prompt=self.SYSTEM_PROMPT,
             user_prompt=user_prompt,
+            sources=tuple(included_results),
         )
