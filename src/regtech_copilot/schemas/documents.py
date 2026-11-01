@@ -6,6 +6,14 @@ from uuid import UUID, uuid4
 
 
 @dataclass(frozen=True, slots=True)
+class DocumentPage:
+    """Represents an individual page extracted from a document."""
+
+    page_number: int
+    content: str
+
+
+@dataclass(frozen=True, slots=True)
 class Document:
     """Represents a source document processed by the application."""
 
@@ -13,6 +21,7 @@ class Document:
     content: str
     page_count: int
     document_id: UUID = field(default_factory=uuid4)
+    pages: tuple[DocumentPage, ...] = ()
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
