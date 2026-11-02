@@ -22,3 +22,7 @@ class EmbeddingProvider(Protocol):
     ) -> EmbeddingResponse:
         """Generate vector embeddings for a collection of texts."""
         ...
+
+    async def aclose(self) -> None:
+        """Close resources owned by the provider."""
+        ...

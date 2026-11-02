@@ -36,3 +36,7 @@ class LLMProvider(Protocol):
     ) -> LLMResponse:
         """Generate a response from a prompt."""
         ...
+
+    async def aclose(self) -> None:
+        """Close resources owned by the provider."""
+        ...
