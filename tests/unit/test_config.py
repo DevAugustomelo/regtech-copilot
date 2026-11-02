@@ -14,6 +14,8 @@ def test_settings_load_default_values() -> None:
 
     assert settings.app_name == "RegTech Copilot"
     assert settings.llm_provider == "ollama"
+    assert settings.embedding_provider == "ollama"
+    assert settings.embedding_base_url == "http://localhost:11434"
     assert settings.chunk_size_tokens == 700
     assert settings.chunk_overlap_tokens == 100
 
@@ -44,3 +46,13 @@ def test_settings_reject_invalid_temperature() -> None:
             llm_model="test-model",
             llm_temperature=3.0,
         )
+
+
+def test_settings_load_custom_embedding_base_url() -> None:
+    settings = Settings(
+        _env_file=None,
+        llm_model="test-model",
+        embedding_base_url="https://embedding.example.com",
+    )
+
+    assert settings.embedding_base_url == "https://embedding.example.com"
