@@ -98,6 +98,7 @@ class NvidiaClient:
             "temperature": options.temperature,
             "top_p": options.top_p,
             "max_tokens": options.max_tokens,
+            "reasoning_budget": 512,
             "stream": False,
         }
 
@@ -149,8 +150,16 @@ class NvidiaClient:
                 raise ValueError("Response does not contain a valid message.")
 
             content = message.get("content")
+            finish_reason = first_choice.get("finish_reason")
 
-            if not isinstance(content, str):
+            if not isinstance(content, str) or not content.strip():
+                if finish_reason == "length":
+                    raise NvidiaResponseError(
+                        "NVIDIA reached the token limit before producing "
+                        "a final text response. Increase max_tokens or "
+                        "adjust reasoning_budget."
+                    )
+
                 raise ValueError("Response message does not contain valid content.")
 
             usage = data.get("usage", {})
