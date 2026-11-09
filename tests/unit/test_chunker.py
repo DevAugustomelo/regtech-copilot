@@ -214,6 +214,28 @@ def test_chunk_splits_legal_articles_and_preserves_pages() -> None:
     assert all(chunk.page_number == 13 for chunk in article_7_chunks)
 
 
+def test_article_pattern_ignores_cross_references_and_recognizes_headings() -> None:
+    chunker = TextChunker(settings=make_settings(200, 20))
+
+    content = (
+        "art. 18 desta Lei.\n"
+        "art. 2o desta Lei;\n"
+        "Art.\u200410.\u2002 O legítimo interesse do controlador.\n"
+        "Art.\u200411.\u2002 O tratamento de dados sensíveis.\n"
+        "Art.\u200455-B.\u2002 A ANPD.\n"
+        "Art.\u200458-A.\u2002 O Conselho Nacional."
+    )
+
+    matches = list(chunker.ARTICLE_PATTERN.finditer(content))
+
+    assert [match.group(1) for match in matches] == [
+        "10",
+        "11",
+        "55-B",
+        "58-A",
+    ]
+
+
 def test_article_pattern_recognizes_ordinal_variations() -> None:
     chunker = TextChunker(settings=make_settings(200, 20))
 

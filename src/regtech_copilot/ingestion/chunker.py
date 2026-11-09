@@ -16,7 +16,8 @@ class TextChunker:
     """Split documents into overlapping token-based chunks."""
 
     ARTICLE_PATTERN = re.compile(
-        r"(?im)^[^\S\r\n]*Art\.[^\S\r\n]*([0-9]+)[º°o]?(?=[^\S\r\n]|$)"
+        r"(?m)^[^\S\r\n]*Art\.[^\S\r\n]*"
+        r"([0-9]+(?:-[A-Z])?)(?:[º°o]\.?|\.)[^\S\r\n]+"
     )
 
     def __init__(
@@ -124,7 +125,7 @@ class TextChunker:
             context_prefix = (
                 "Contexto estrutural gerado pelo sistema "
                 f"(não integra o texto legal): {section_type} do "
-                f"Art. {article_reference}º."
+                f"Art. {article_reference}{'º' if article_reference.isdigit() else ''}."
             )
             content = f"{context_prefix}\n\n{content}"
 
