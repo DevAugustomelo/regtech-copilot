@@ -2,6 +2,7 @@
 
 import asyncio
 from dataclasses import dataclass
+from uuid import UUID
 
 from regtech_copilot.embeddings.base import EmbeddingProvider
 from regtech_copilot.retrieval.lexical_store import LexicalStore
@@ -139,8 +140,78 @@ class RetrievalService:
             for chunk_id, score in scores.items()
         ]
 
-        return sorted(
+        ranked_results = sorted(
             ranked_results,
             key=lambda result: result.rrf_score,
             reverse=True,
         )[:result_limit]
+
+        # Expand retrieved articles with their neighboring chunks.
+        article_keys: list[tuple[UUID, str]] = []
+        for result in ranked_results:
+            article_reference = result.chunk.metadata.get("article_reference")
+
+            if not isinstance(article_reference, str) or not article_reference.strip():
+                continue
+
+            article_key = (result.chunk.document_id, article_reference)
+
+            if article_key not in article_keys:
+                article_keys.append(article_key)
+
+        if not article_keys:
+            return ranked_results
+
+        article_results = await asyncio.gather(
+            *(
+                asyncio.to_thread(
+                    self.vector_store.search_by_article,
+                    query_embedding,
+                    document_id,
+                    article_reference,
+                )
+                for document_id, article_reference in article_keys
+            )
+        )
+
+        related_chunks = dict(zip(article_keys, article_results, strict=True))
+        included_chunk_ids = {result.chunk.chunk_id for result in ranked_results}
+        expanded_articles: set[tuple[UUID, str]] = set()
+        expanded_results: list[RetrievalResult] = []
+
+        for result in ranked_results:
+            expanded_results.append(result)
+
+            article_reference = result.chunk.metadata.get("article_reference")
+
+            if not isinstance(article_reference, str) or not article_reference.strip():
+                continue
+
+            article_key = (result.chunk.document_id, article_reference)
+
+            if article_key in expanded_articles:
+                continue
+
+            expanded_articles.add(article_key)
+            additional_count = 0
+
+            for related_result in related_chunks.get(article_key, []):
+                chunk = related_result.chunk
+
+                if chunk.chunk_id in included_chunk_ids:
+                    continue
+
+                expanded_results.append(
+                    RetrievalResult(
+                        chunk=chunk,
+                        rrf_score=0.0,
+                        vector_distance=related_result.distance,
+                    )
+                )
+                included_chunk_ids.add(chunk.chunk_id)
+                additional_count += 1
+
+                if additional_count >= 2:
+                    break
+
+        return expanded_results

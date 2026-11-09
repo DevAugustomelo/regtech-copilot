@@ -253,3 +253,51 @@ async def test_retrieve_fuses_semantic_and_lexical_results(
 
     assert results[1].rrf_score == pytest.approx(2 / 62)
     assert results[2].rrf_score == pytest.approx(1 / 62)
+
+
+@pytest.mark.asyncio
+async def test_retrieve_expands_chunks_from_the_same_article(
+    service: RetrievalService,
+    vector_store: MagicMock,
+) -> None:
+    """Include sibling chunks without duplicating the original result."""
+
+    document_id = uuid4()
+
+    original_chunk = DocumentChunk(
+        document_id=document_id,
+        content="Art. 7º. O tratamento de dados pessoais somente poderá ser realizado.",
+        chunk_index=0,
+        page_number=13,
+        metadata={"article_reference": "7"},
+    )
+    continuation_chunk = DocumentChunk(
+        document_id=document_id,
+        content="VII - para a proteção da vida ou da incolumidade física.",
+        chunk_index=1,
+        page_number=14,
+        metadata={"article_reference": "7"},
+    )
+
+    vector_store.search.return_value = [
+        VectorSearchResult(original_chunk, distance=0.05),
+    ]
+    vector_store.search_by_article.return_value = [
+        VectorSearchResult(original_chunk, distance=0.05),
+        VectorSearchResult(continuation_chunk, distance=0.08),
+    ]
+
+    results = await service.retrieve("Quais são as bases legais?")
+
+    vector_store.search_by_article.assert_called_once_with(
+        [0.1, 0.2, 0.3],
+        document_id,
+        "7",
+    )
+
+    assert [result.chunk.chunk_id for result in results] == [
+        original_chunk.chunk_id,
+        continuation_chunk.chunk_id,
+    ]
+    assert results[0].rrf_score == pytest.approx(1 / 61)
+    assert results[1].rrf_score == 0.0
