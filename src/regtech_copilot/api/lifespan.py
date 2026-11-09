@@ -17,6 +17,7 @@ from regtech_copilot.ingestion.service import IngestionService
 from regtech_copilot.llm.base import GenerationOptions
 from regtech_copilot.llm.factory import LLMFactory
 from regtech_copilot.retrieval.lexical_store import SQLiteLexicalStore
+from regtech_copilot.retrieval.query_expander import QueryExpander
 from regtech_copilot.retrieval.service import RetrievalService
 from regtech_copilot.vector_store.chroma import ChromaVectorStore
 
@@ -71,6 +72,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             vector_store=vector_store,
             lexical_store=lexical_store,
             top_k=settings.retrieval_top_k,
+            query_expander=QueryExpander(),
         )
 
         generation_service = GenerationService(

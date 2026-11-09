@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 from regtech_copilot.embeddings.base import EmbeddingProvider
 from regtech_copilot.retrieval.lexical_store import LexicalStore
+from regtech_copilot.retrieval.query_expander import QueryExpander
 from regtech_copilot.schemas.documents import DocumentChunk
 from regtech_copilot.vector_store.base import VectorStore
 
@@ -32,6 +33,7 @@ class RetrievalService:
 
     CANDIDATE_MULTIPLIER = 3
     RRF_CONSTANT = 60
+    LEXICAL_WEIGHT = 2.0
 
     def __init__(
         self,
@@ -39,6 +41,7 @@ class RetrievalService:
         vector_store: VectorStore,
         lexical_store: LexicalStore,
         top_k: int = 5,
+        query_expander: QueryExpander | None = None,
     ) -> None:
         if top_k <= 0:
             raise ValueError("top_k must be greater than zero.")
@@ -47,6 +50,7 @@ class RetrievalService:
         self.vector_store = vector_store
         self.lexical_store = lexical_store
         self.top_k = top_k
+        self.query_expander = query_expander
 
     async def retrieve(
         self,
@@ -63,8 +67,14 @@ class RetrievalService:
         if result_limit <= 0:
             raise ValueError("top_k must be greater than zero.")
 
+        search_query = (
+            self.query_expander.expand(query)
+            if self.query_expander is not None
+            else query
+        )
+
         embedding_response = await self.embedding_provider.embed(
-            [query],
+            [search_query],
             input_type="query",
         )
 
@@ -91,7 +101,7 @@ class RetrievalService:
             ),
             asyncio.to_thread(
                 self.lexical_store.search,
-                query,
+                search_query,
                 candidate_limit,
             ),
         )
@@ -114,7 +124,7 @@ class RetrievalService:
             chunk_id = lexical_result.chunk.chunk_id
 
             scores[chunk_id] = scores.get(chunk_id, 0.0) + (
-                1.0 / (self.RRF_CONSTANT + rank)
+                self.LEXICAL_WEIGHT / (self.RRF_CONSTANT + rank)
             )
             chunks.setdefault(chunk_id, lexical_result.chunk)
             lexical_scores[chunk_id] = lexical_result.score

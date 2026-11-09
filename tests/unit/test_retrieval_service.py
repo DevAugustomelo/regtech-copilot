@@ -247,9 +247,9 @@ async def test_retrieve_fuses_semantic_and_lexical_results(
 
     assert len(results) == 3
     assert results[0].chunk.chunk_id == shared_chunk.chunk_id
-    assert results[0].rrf_score == pytest.approx(2 / 61)
+    assert results[0].rrf_score == pytest.approx(3 / 61)
     assert results[0].vector_distance == 0.05
     assert results[0].lexical_score == -2.0
 
-    assert results[1].rrf_score == pytest.approx(1 / 62)
+    assert results[1].rrf_score == pytest.approx(2 / 62)
     assert results[2].rrf_score == pytest.approx(1 / 62)
