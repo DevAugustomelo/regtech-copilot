@@ -20,8 +20,9 @@ class EmbeddingFactory:
 
         if config.embedding_provider == "ollama":
             return OllamaEmbeddingClient(
-                base_url=config.llm_base_url,
+                base_url=config.embedding_base_url,
                 model=config.embedding_model,
+                timeout=config.embedding_timeout,
                 expected_dimensions=config.embedding_dimensions,
             )
 

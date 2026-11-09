@@ -11,17 +11,16 @@ from regtech_copilot.generation.service import (
     GenerationService,
 )
 from regtech_copilot.llm.base import GenerationOptions, LLMResponse
-from regtech_copilot.retrieval.service import RetrievalService
+from regtech_copilot.retrieval.service import RetrievalResult, RetrievalService
 from regtech_copilot.schemas.documents import DocumentChunk
-from regtech_copilot.vector_store.base import VectorSearchResult
 
 
 @pytest.fixture
-def search_results() -> list[VectorSearchResult]:
+def search_results() -> list[RetrievalResult]:
     """Provide sample retrieved chunks."""
 
     return [
-        VectorSearchResult(
+        RetrievalResult(
             chunk=DocumentChunk(
                 document_id=uuid4(),
                 content="Organizations must protect personal data.",
@@ -29,14 +28,14 @@ def search_results() -> list[VectorSearchResult]:
                 page_number=3,
                 metadata={"filename": "regulation.pdf"},
             ),
-            distance=0.05,
+            rrf_score=0.05,
         )
     ]
 
 
 @pytest.fixture
 def retrieval_service(
-    search_results: list[VectorSearchResult],
+    search_results: list[RetrievalResult],
 ) -> AsyncMock:
     """Provide a mocked retrieval service."""
 
@@ -93,7 +92,7 @@ async def test_generate_returns_grounded_response(
     retrieval_service: AsyncMock,
     llm_provider: AsyncMock,
     generation_options: GenerationOptions,
-    search_results: list[VectorSearchResult],
+    search_results: list[RetrievalResult],
 ) -> None:
     """Test the complete RAG generation pipeline."""
 

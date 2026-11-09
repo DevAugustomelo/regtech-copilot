@@ -5,18 +5,18 @@ from uuid import uuid4
 import pytest
 
 from regtech_copilot.generation.prompt_builder import PromptBuilder
+from regtech_copilot.retrieval.service import RetrievalResult
 from regtech_copilot.schemas.documents import DocumentChunk
-from regtech_copilot.vector_store.base import VectorSearchResult
 
 
 @pytest.fixture
-def search_results() -> list[VectorSearchResult]:
+def search_results() -> list[RetrievalResult]:
     """Provide sample retrieved document chunks."""
 
     document_id = uuid4()
 
     return [
-        VectorSearchResult(
+        RetrievalResult(
             chunk=DocumentChunk(
                 document_id=document_id,
                 content="Organizations must protect personal data.",
@@ -24,9 +24,9 @@ def search_results() -> list[VectorSearchResult]:
                 page_number=3,
                 metadata={"filename": "regulation.pdf"},
             ),
-            distance=0.05,
+            rrf_score=0.05,
         ),
-        VectorSearchResult(
+        RetrievalResult(
             chunk=DocumentChunk(
                 document_id=document_id,
                 content="Organizations must report certain incidents.",
@@ -34,13 +34,13 @@ def search_results() -> list[VectorSearchResult]:
                 page_number=4,
                 metadata={"filename": "regulation.pdf"},
             ),
-            distance=0.12,
+            rrf_score=0.12,
         ),
     ]
 
 
 def test_build_creates_system_and_user_prompts(
-    search_results: list[VectorSearchResult],
+    search_results: list[RetrievalResult],
 ) -> None:
     """Test that both prompts are generated."""
 
@@ -57,7 +57,7 @@ def test_build_creates_system_and_user_prompts(
 
 
 def test_build_includes_retrieved_sources(
-    search_results: list[VectorSearchResult],
+    search_results: list[RetrievalResult],
 ) -> None:
     """Test that retrieved chunks and their references are included."""
 
@@ -73,7 +73,7 @@ def test_build_includes_retrieved_sources(
 
 
 def test_build_instructs_model_to_avoid_unsupported_answers(
-    search_results: list[VectorSearchResult],
+    search_results: list[RetrievalResult],
 ) -> None:
     """Test that grounding instructions are included."""
 
@@ -118,7 +118,7 @@ def test_builder_rejects_invalid_context_size() -> None:
 
 
 def test_build_limits_context_size(
-    search_results: list[VectorSearchResult],
+    search_results: list[RetrievalResult],
 ) -> None:
     """Test that oversized source content is not fully included."""
 

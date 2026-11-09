@@ -100,7 +100,9 @@ async def test_generate_sends_correct_payload(
         assert payload["temperature"] == 0.1
         assert payload["top_p"] == 0.9
         assert payload["max_tokens"] == 500
-        assert payload["reasoning_budget"] == 512
+        assert payload["chat_template_kwargs"] == {
+            "enable_thinking": False,
+        }
         assert payload["stream"] is False
         assert payload["messages"] == [
             {"role": "system", "content": "System prompt"},
@@ -238,6 +240,38 @@ async def test_generate_handles_token_limit_without_final_content(
                 "User prompt",
                 options=options,
             )
+    finally:
+        await http_client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_generate_rejects_truncated_response(
+    options: GenerationOptions,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "content": "Resposta incompleta...",
+                        },
+                        "finish_reason": "length",
+                    }
+                ]
+            },
+        )
+
+    client, http_client = create_client(httpx.MockTransport(handler))
+
+    try:
+        with pytest.raises(
+            NvidiaResponseError,
+            match="token limit",
+        ):
+            await client.generate("User prompt", options=options)
     finally:
         await http_client.aclose()
 

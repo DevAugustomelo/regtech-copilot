@@ -7,8 +7,10 @@ from regtech_copilot.llm.base import (
     GenerationOptions,
     LLMProvider,
 )
-from regtech_copilot.retrieval.service import RetrievalService
-from regtech_copilot.vector_store.base import VectorSearchResult
+from regtech_copilot.retrieval.service import (
+    RetrievalResult,
+    RetrievalService,
+)
 
 
 class GenerationServiceError(Exception):
@@ -24,7 +26,7 @@ class GenerationResult:
     """Complete response with its supporting sources and usage metadata."""
 
     answer: str
-    sources: tuple[VectorSearchResult, ...]
+    sources: tuple[RetrievalResult, ...]
     provider: str
     model: str
     input_tokens: int | None = None

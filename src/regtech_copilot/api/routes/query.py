@@ -35,7 +35,7 @@ class QuerySource(BaseModel):
     document_id: str
     chunk_id: str
     page_number: int | None
-    distance: float
+    rrf_score: float
     excerpt: str
 
 
@@ -66,7 +66,7 @@ def _build_sources(result: GenerationResult) -> list[QuerySource]:
                 document_id=str(chunk.document_id),
                 chunk_id=str(chunk.chunk_id),
                 page_number=chunk.page_number,
-                distance=source.distance,
+                rrf_score=source.rrf_score,
                 excerpt=chunk.content,
             )
         )

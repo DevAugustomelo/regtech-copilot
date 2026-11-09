@@ -278,3 +278,84 @@ def test_embed_rejects_non_finite_values(invalid_value: str) -> None:
             await http_client.aclose()
 
     asyncio.run(run_test())
+
+
+@pytest.mark.parametrize(
+    ("input_type", "expected_prefix"),
+    [
+        ("document", "search_document:"),
+        ("query", "search_query:"),
+    ],
+)
+def test_embed_applies_nomic_task_prefix(
+    input_type: str,
+    expected_prefix: str,
+) -> None:
+    async def run_test() -> None:
+        captured_payload: dict[str, object] = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            import json
+
+            captured_payload.update(json.loads(request.content))
+
+            return httpx.Response(
+                200,
+                json={"embeddings": [[0.1, 0.2, 0.3]]},
+            )
+
+        http_client = httpx.AsyncClient(
+            transport=httpx.MockTransport(handler),
+        )
+
+        client = OllamaEmbeddingClient(
+            base_url="http://localhost:11434",
+            model="nomic-embed-text",
+            http_client=http_client,
+        )
+
+        try:
+            await client.embed(
+                ["Texto de teste"],
+                input_type=input_type,  # type: ignore[arg-type]
+            )
+
+            assert captured_payload["input"] == [f"{expected_prefix} Texto de teste"]
+        finally:
+            await http_client.aclose()
+
+    asyncio.run(run_test())
+
+
+def test_embed_does_not_apply_nomic_prefix_to_other_models() -> None:
+    async def run_test() -> None:
+        captured_payload: dict[str, object] = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            import json
+
+            captured_payload.update(json.loads(request.content))
+
+            return httpx.Response(
+                200,
+                json={"embeddings": [[0.1, 0.2, 0.3]]},
+            )
+
+        http_client = httpx.AsyncClient(
+            transport=httpx.MockTransport(handler),
+        )
+
+        client = OllamaEmbeddingClient(
+            base_url="http://localhost:11434",
+            model="other-embedding-model",
+            http_client=http_client,
+        )
+
+        try:
+            await client.embed(["Texto de teste"])
+
+            assert captured_payload["input"] == ["Texto de teste"]
+        finally:
+            await http_client.aclose()
+
+    asyncio.run(run_test())

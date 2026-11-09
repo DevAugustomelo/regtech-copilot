@@ -249,3 +249,57 @@ def test_search_rejects_non_finite_query_embedding(
         vector_store.search(
             query_embedding=[1.0, float("inf")],
         )
+
+
+def test_search_by_article_returns_only_matching_article(
+    vector_store: ChromaVectorStore,
+    sample_chunk: DocumentChunk,
+) -> None:
+    first_chunk = DocumentChunk(
+        document_id=sample_chunk.document_id,
+        content="Art. 6º - Princípios I a VI.",
+        chunk_index=0,
+        page_number=12,
+        metadata={"article_reference": "6"},
+    )
+
+    continuation_chunk = DocumentChunk(
+        document_id=sample_chunk.document_id,
+        content="Art. 6º - Princípios VII a X.",
+        chunk_index=1,
+        page_number=13,
+        metadata={
+            "article_reference": "6",
+            "article_continuation": True,
+        },
+    )
+
+    other_article = DocumentChunk(
+        document_id=sample_chunk.document_id,
+        content="Art. 7º - Outra disposição.",
+        chunk_index=2,
+        page_number=14,
+        metadata={"article_reference": "7"},
+    )
+
+    vector_store.add(
+        chunks=[first_chunk, continuation_chunk, other_article],
+        embeddings=[
+            [1.0, 0.0, 0.0],
+            [0.9, 0.1, 0.0],
+            [0.0, 1.0, 0.0],
+        ],
+    )
+
+    results = vector_store.search_by_article(
+        query_embedding=[1.0, 0.0, 0.0],
+        document_id=sample_chunk.document_id,
+        article_reference="6",
+    )
+
+    assert len(results) == 2
+    assert {result.chunk.chunk_id for result in results} == {
+        first_chunk.chunk_id,
+        continuation_chunk.chunk_id,
+    }
+    assert all(result.distance >= 0 for result in results)

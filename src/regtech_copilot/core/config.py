@@ -44,6 +44,8 @@ class Settings(BaseSettings):
     embedding_base_url: str = "http://localhost:11434"
     embedding_model: str = "nomic-embed-text"
     embedding_dimensions: int | None = Field(default=None, gt=0)
+    embedding_timeout: float = Field(default=180.0, gt=0)
+    embedding_batch_size: int = Field(default=4, gt=0)
 
     # Storage
     vector_store_path: str = "data/vector_store"

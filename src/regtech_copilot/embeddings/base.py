@@ -1,7 +1,11 @@
 """Shared interface and data models for embedding providers."""
 
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
+
+
+class EmbeddingProviderError(Exception):
+    """Base exception for embedding provider failures."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,6 +23,8 @@ class EmbeddingProvider(Protocol):
     async def embed(
         self,
         texts: list[str],
+        *,
+        input_type: Literal["document", "query"] = "document",
     ) -> EmbeddingResponse:
         """Generate vector embeddings for a collection of texts."""
         ...

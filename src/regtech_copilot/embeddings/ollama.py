@@ -1,15 +1,18 @@
 """Ollama embedding provider implementation."""
 
 import math
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 
-from regtech_copilot.embeddings.base import EmbeddingResponse
+from regtech_copilot.embeddings.base import (
+    EmbeddingProviderError,
+    EmbeddingResponse,
+)
 
 
-class OllamaEmbeddingError(Exception):
-    """Base exception for Ollama embedding errors."""
+class OllamaEmbeddingError(EmbeddingProviderError):
+    """Base exception for Ollama embedding failures."""
 
 
 class OllamaEmbeddingConnectionError(OllamaEmbeddingError):
@@ -53,7 +56,12 @@ class OllamaEmbeddingClient:
             timeout=timeout,
         )
 
-    async def embed(self, texts: list[str]) -> EmbeddingResponse:
+    async def embed(
+        self,
+        texts: list[str],
+        *,
+        input_type: Literal["document", "query"] = "document",
+    ) -> EmbeddingResponse:
         """Generate embeddings for a collection of texts."""
 
         if not texts:
@@ -62,9 +70,16 @@ class OllamaEmbeddingClient:
         if any(not text.strip() for text in texts):
             raise ValueError("Texts cannot contain empty values.")
 
+        prepared_texts = texts
+
+        # Nomic models require task-specific prefixes for retrieval.
+        if self.model.split(":")[0] == "nomic-embed-text":
+            prefix = "search_document:" if input_type == "document" else "search_query:"
+            prepared_texts = [f"{prefix} {text}" for text in texts]
+
         payload = {
             "model": self.model,
-            "input": texts,
+            "input": prepared_texts,
         }
 
         try:
@@ -134,6 +149,7 @@ class OllamaEmbeddingClient:
                 f"Expected {self.expected_dimensions} dimensions, "
                 f"received {dimensions}."
             )
+
         return EmbeddingResponse(
             embeddings=embeddings,
             model=self.model,

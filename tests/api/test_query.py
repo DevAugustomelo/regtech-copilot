@@ -9,8 +9,8 @@ from fastapi.testclient import TestClient
 from regtech_copilot.api.dependencies import get_generation_service
 from regtech_copilot.api.routes.query import router as query_router
 from regtech_copilot.generation.service import GenerationResult
+from regtech_copilot.retrieval.service import RetrievalResult
 from regtech_copilot.schemas.documents import DocumentChunk
-from regtech_copilot.vector_store.base import VectorSearchResult
 
 
 class FakeGenerationService:
@@ -33,9 +33,9 @@ class FakeGenerationService:
         return GenerationResult(
             answer=f"Resposta fundamentada para: {query}",
             sources=(
-                VectorSearchResult(
+                RetrievalResult(
                     chunk=chunk,
-                    distance=0.15,
+                    rrf_score=0.025,
                 ),
             ),
             provider="nvidia",
@@ -77,6 +77,7 @@ def test_query_returns_answer_and_sources(client: TestClient) -> None:
     assert data["sources"][0]["reference"] == "F1"
     assert data["sources"][0]["filename"] == "lgpd.pdf"
     assert data["sources"][0]["page_number"] == 5
+    assert data["sources"][0]["rrf_score"] == 0.025
 
 
 def test_query_rejects_empty_question(client: TestClient) -> None:

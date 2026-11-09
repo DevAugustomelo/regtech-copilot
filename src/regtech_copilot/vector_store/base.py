@@ -34,6 +34,15 @@ class VectorStore(Protocol):
         """Retrieve the most similar chunks for a query embedding."""
         ...
 
+    def search_by_article(
+        self,
+        query_embedding: list[float],
+        document_id: UUID,
+        article_reference: str,
+    ) -> list[VectorSearchResult]:
+        """Retrieve chunks belonging to a specific article."""
+        ...
+
     def delete(self, document_id: UUID) -> None:
         """Delete all chunks belonging to a document."""
         ...

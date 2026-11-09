@@ -98,7 +98,9 @@ class NvidiaClient:
             "temperature": options.temperature,
             "top_p": options.top_p,
             "max_tokens": options.max_tokens,
-            "reasoning_budget": 512,
+            "chat_template_kwargs": {
+                "enable_thinking": False,
+            },
             "stream": False,
         }
 
@@ -151,6 +153,11 @@ class NvidiaClient:
 
             content = message.get("content")
             finish_reason = first_choice.get("finish_reason")
+            if finish_reason == "length":
+                raise NvidiaResponseError(
+                    "NVIDIA reached the token limit before completing "
+                    "the response. Increase max_tokens or simplify the prompt."
+                )
 
             if not isinstance(content, str) or not content.strip():
                 if finish_reason == "length":

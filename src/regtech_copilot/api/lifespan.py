@@ -69,6 +69,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         retrieval_service = RetrievalService(
             embedding_provider=embedding_provider,
             vector_store=vector_store,
+            lexical_store=lexical_store,
             top_k=settings.retrieval_top_k,
         )
 

@@ -1,9 +1,12 @@
-"""Retrieve relevant document chunks using semantic similarity."""
+"""Retrieve relevant document chunks using hybrid search and RRF."""
 
 import asyncio
+from dataclasses import dataclass
 
 from regtech_copilot.embeddings.base import EmbeddingProvider
-from regtech_copilot.vector_store.base import VectorSearchResult, VectorStore
+from regtech_copilot.retrieval.lexical_store import LexicalStore
+from regtech_copilot.schemas.documents import DocumentChunk
+from regtech_copilot.vector_store.base import VectorStore
 
 
 class RetrievalServiceError(Exception):
@@ -14,13 +17,27 @@ class RetrievalEmbeddingError(RetrievalServiceError):
     """Raised when query embedding generation returns invalid results."""
 
 
+@dataclass(frozen=True, slots=True)
+class RetrievalResult:
+    """A chunk retrieved and ranked through hybrid search."""
+
+    chunk: DocumentChunk
+    rrf_score: float
+    vector_distance: float | None = None
+    lexical_score: float | None = None
+
+
 class RetrievalService:
-    """Generate query embeddings and retrieve relevant document chunks."""
+    """Generate query embeddings and retrieve chunks using hybrid search."""
+
+    CANDIDATE_MULTIPLIER = 3
+    RRF_CONSTANT = 60
 
     def __init__(
         self,
         embedding_provider: EmbeddingProvider,
         vector_store: VectorStore,
+        lexical_store: LexicalStore,
         top_k: int = 5,
     ) -> None:
         if top_k <= 0:
@@ -28,14 +45,15 @@ class RetrievalService:
 
         self.embedding_provider = embedding_provider
         self.vector_store = vector_store
+        self.lexical_store = lexical_store
         self.top_k = top_k
 
     async def retrieve(
         self,
         query: str,
         top_k: int | None = None,
-    ) -> list[VectorSearchResult]:
-        """Retrieve the most relevant chunks for a user query."""
+    ) -> list[RetrievalResult]:
+        """Retrieve and fuse semantic and lexical search results."""
 
         if not query.strip():
             raise ValueError("Query cannot be empty.")
@@ -45,7 +63,10 @@ class RetrievalService:
         if result_limit <= 0:
             raise ValueError("top_k must be greater than zero.")
 
-        embedding_response = await self.embedding_provider.embed([query])
+        embedding_response = await self.embedding_provider.embed(
+            [query],
+            input_type="query",
+        )
 
         if len(embedding_response.embeddings) != 1:
             raise RetrievalEmbeddingError(
@@ -60,8 +81,56 @@ class RetrievalService:
         ):
             raise RetrievalEmbeddingError("The query embedding has invalid dimensions.")
 
-        return await asyncio.to_thread(
-            self.vector_store.search,
-            query_embedding,
-            result_limit,
+        candidate_limit = result_limit * self.CANDIDATE_MULTIPLIER
+
+        vector_results, lexical_results = await asyncio.gather(
+            asyncio.to_thread(
+                self.vector_store.search,
+                query_embedding,
+                candidate_limit,
+            ),
+            asyncio.to_thread(
+                self.lexical_store.search,
+                query,
+                candidate_limit,
+            ),
         )
+
+        scores: dict[object, float] = {}
+        chunks: dict[object, DocumentChunk] = {}
+        vector_distances: dict[object, float] = {}
+        lexical_scores: dict[object, float] = {}
+
+        for rank, vector_result in enumerate(vector_results, start=1):
+            chunk_id = vector_result.chunk.chunk_id
+
+            scores[chunk_id] = scores.get(chunk_id, 0.0) + (
+                1.0 / (self.RRF_CONSTANT + rank)
+            )
+            chunks[chunk_id] = vector_result.chunk
+            vector_distances[chunk_id] = vector_result.distance
+
+        for rank, lexical_result in enumerate(lexical_results, start=1):
+            chunk_id = lexical_result.chunk.chunk_id
+
+            scores[chunk_id] = scores.get(chunk_id, 0.0) + (
+                1.0 / (self.RRF_CONSTANT + rank)
+            )
+            chunks.setdefault(chunk_id, lexical_result.chunk)
+            lexical_scores[chunk_id] = lexical_result.score
+
+        ranked_results = [
+            RetrievalResult(
+                chunk=chunks[chunk_id],
+                rrf_score=score,
+                vector_distance=vector_distances.get(chunk_id),
+                lexical_score=lexical_scores.get(chunk_id),
+            )
+            for chunk_id, score in scores.items()
+        ]
+
+        return sorted(
+            ranked_results,
+            key=lambda result: result.rrf_score,
+            reverse=True,
+        )[:result_limit]
