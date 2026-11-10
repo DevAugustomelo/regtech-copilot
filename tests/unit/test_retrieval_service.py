@@ -10,6 +10,7 @@ from regtech_copilot.retrieval.lexical_store import (
     LexicalSearchResult,
     LexicalStore,
 )
+from regtech_copilot.retrieval.query_expander import QueryExpander
 from regtech_copilot.retrieval.service import (
     RetrievalEmbeddingError,
     RetrievalService,
@@ -301,3 +302,61 @@ async def test_retrieve_expands_chunks_from_the_same_article(
     ]
     assert results[0].rrf_score == pytest.approx(1 / 61)
     assert results[1].rrf_score == 0.0
+
+
+@pytest.mark.asyncio
+async def test_retrieve_fuses_multiple_lexical_variants_without_duplicate_scores(
+    service: RetrievalService,
+    vector_store: MagicMock,
+    lexical_store: MagicMock,
+) -> None:
+    """Use the best lexical rank when a chunk appears in multiple searches."""
+
+    query = (
+        "Em quais situações o tratamento de dados pessoais deve ser encerrado "
+        "e quando os dados podem ser conservados?"
+    )
+
+    shared_chunk = DocumentChunk(
+        document_id=uuid4(),
+        content="Art. 15. O término do tratamento de dados pessoais.",
+        chunk_index=0,
+        page_number=20,
+    )
+    other_chunk = DocumentChunk(
+        document_id=uuid4(),
+        content="Art. 16. Os dados pessoais serão eliminados.",
+        chunk_index=1,
+        page_number=21,
+    )
+
+    service.query_expander = QueryExpander()
+
+    vector_store.search.return_value = [
+        VectorSearchResult(shared_chunk, distance=0.05),
+    ]
+
+    lexical_store.search.side_effect = [
+        [
+            LexicalSearchResult(other_chunk, score=-1.0),
+            LexicalSearchResult(shared_chunk, score=-2.0),
+        ],
+        [
+            LexicalSearchResult(shared_chunk, score=-3.0),
+            LexicalSearchResult(other_chunk, score=-4.0),
+        ],
+        [
+            LexicalSearchResult(shared_chunk, score=-5.0),
+        ],
+    ]
+
+    results = await service.retrieve(query)
+
+    assert lexical_store.search.call_count == 3
+
+    shared_result = next(
+        result for result in results if result.chunk.chunk_id == shared_chunk.chunk_id
+    )
+
+    assert shared_result.rrf_score == pytest.approx(3 / 61)
+    assert shared_result.lexical_score == -3.0

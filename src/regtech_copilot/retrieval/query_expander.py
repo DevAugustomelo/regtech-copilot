@@ -120,3 +120,27 @@ class QueryExpander:
             return query
 
         return f"{query} {' '.join(additions)}"
+
+
+    def expand_variants(self, query: str) -> list[str]:
+        """Return focused expansions when multiple concepts are detected."""
+
+        normalized_query = self._normalize(query)
+        matched_expansions: list[str] = []
+
+        for triggers, expansion in self.EXPANSIONS.items():
+            matched = any(
+                re.search(
+                    rf"(?<!\w){re.escape(self._normalize(trigger))}(?!\w)",
+                    normalized_query,
+                )
+                for trigger in triggers
+            )
+
+            if matched:
+                matched_expansions.append(expansion)
+
+        if len(matched_expansions) <= 1:
+            return []
+
+        return matched_expansions

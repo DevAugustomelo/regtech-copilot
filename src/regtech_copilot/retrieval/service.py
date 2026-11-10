@@ -94,23 +94,34 @@ class RetrievalService:
 
         candidate_limit = result_limit * self.CANDIDATE_MULTIPLIER
 
-        vector_results, lexical_results = await asyncio.gather(
+        lexical_queries = [search_query]
+
+        if self.query_expander is not None:
+            lexical_queries.extend(self.query_expander.expand_variants(query))
+
+        vector_results, lexical_result_sets = await asyncio.gather(
             asyncio.to_thread(
                 self.vector_store.search,
                 query_embedding,
                 candidate_limit,
             ),
-            asyncio.to_thread(
-                self.lexical_store.search,
-                search_query,
-                candidate_limit,
+            asyncio.gather(
+                *(
+                    asyncio.to_thread(
+                        self.lexical_store.search,
+                        lexical_query,
+                        candidate_limit,
+                    )
+                    for lexical_query in lexical_queries
+                )
             ),
         )
 
-        scores: dict[object, float] = {}
-        chunks: dict[object, DocumentChunk] = {}
-        vector_distances: dict[object, float] = {}
-        lexical_scores: dict[object, float] = {}
+        scores: dict[UUID, float] = {}
+        chunks: dict[UUID, DocumentChunk] = {}
+        vector_distances: dict[UUID, float] = {}
+        lexical_scores: dict[UUID, float] = {}
+        best_lexical_ranks: dict[UUID, int] = {}
 
         for rank, vector_result in enumerate(vector_results, start=1):
             chunk_id = vector_result.chunk.chunk_id
@@ -121,14 +132,22 @@ class RetrievalService:
             chunks[chunk_id] = vector_result.chunk
             vector_distances[chunk_id] = vector_result.distance
 
-        for rank, lexical_result in enumerate(lexical_results, start=1):
-            chunk_id = lexical_result.chunk.chunk_id
+        for lexical_results in lexical_result_sets:
+            for rank, lexical_result in enumerate(lexical_results, start=1):
+                chunk_id = lexical_result.chunk.chunk_id
+                previous_rank = best_lexical_ranks.get(chunk_id)
 
+                if previous_rank is not None and previous_rank <= rank:
+                    continue
+
+                best_lexical_ranks[chunk_id] = rank
+                chunks.setdefault(chunk_id, lexical_result.chunk)
+                lexical_scores[chunk_id] = lexical_result.score
+
+        for chunk_id, rank in best_lexical_ranks.items():
             scores[chunk_id] = scores.get(chunk_id, 0.0) + (
                 self.LEXICAL_WEIGHT / (self.RRF_CONSTANT + rank)
             )
-            chunks.setdefault(chunk_id, lexical_result.chunk)
-            lexical_scores[chunk_id] = lexical_result.score
 
         ranked_results = [
             RetrievalResult(
