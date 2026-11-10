@@ -360,3 +360,50 @@ async def test_retrieve_fuses_multiple_lexical_variants_without_duplicate_scores
 
     assert shared_result.rrf_score == pytest.approx(3 / 61)
     assert shared_result.lexical_score == -3.0
+
+
+@pytest.mark.asyncio
+async def test_retrieve_reranks_candidates_before_applying_top_k(
+    embedding_provider: AsyncMock,
+    vector_store: MagicMock,
+    lexical_store: MagicMock,
+) -> None:
+    """Rerank all candidates before limiting the final results."""
+
+    chunks = [
+        DocumentChunk(
+            document_id=uuid4(),
+            content=f"Regulatory document chunk {index}.",
+            chunk_index=index,
+        )
+        for index in range(15)
+    ]
+
+    vector_store.search.return_value = [
+        VectorSearchResult(chunk, distance=0.05 + index * 0.01)
+        for index, chunk in enumerate(chunks)
+    ]
+
+    reranker = MagicMock()
+    reranker.rerank.side_effect = lambda query, results: list(reversed(results))
+
+    retrieval_service = RetrievalService(
+        embedding_provider=embedding_provider,
+        vector_store=vector_store,
+        lexical_store=lexical_store,
+        top_k=5,
+        reranker=reranker,
+    )
+
+    query = "Quais são os princípios da LGPD?"
+    results = await retrieval_service.retrieve(query)
+
+    reranker.rerank.assert_called_once()
+
+    received_query, candidates = reranker.rerank.call_args.args
+
+    assert received_query == query
+    assert len(candidates) == 15
+    assert len(results) == 5
+
+    assert [result.chunk.chunk_index for result in results] == [14, 13, 12, 11, 10]

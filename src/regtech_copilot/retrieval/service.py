@@ -2,6 +2,7 @@
 
 import asyncio
 from dataclasses import dataclass
+from typing import Protocol
 from uuid import UUID
 
 from regtech_copilot.embeddings.base import EmbeddingProvider
@@ -29,6 +30,16 @@ class RetrievalResult:
     lexical_score: float | None = None
 
 
+class Reranker(Protocol):
+    """Interface for retrieval reranking implementations."""
+
+    def rerank(
+        self,
+        query: str,
+        results: list[RetrievalResult],
+    ) -> list[RetrievalResult]: ...
+
+
 class RetrievalService:
     """Generate query embeddings and retrieve chunks using hybrid search."""
 
@@ -43,6 +54,7 @@ class RetrievalService:
         lexical_store: LexicalStore,
         top_k: int = 5,
         query_expander: QueryExpander | None = None,
+        reranker: Reranker | None = None,
     ) -> None:
         if top_k <= 0:
             raise ValueError("top_k must be greater than zero.")
@@ -52,6 +64,7 @@ class RetrievalService:
         self.lexical_store = lexical_store
         self.top_k = top_k
         self.query_expander = query_expander
+        self.reranker = reranker
 
     async def retrieve(
         self,
@@ -163,7 +176,16 @@ class RetrievalService:
             ranked_results,
             key=lambda result: result.rrf_score,
             reverse=True,
-        )[:result_limit]
+        )[:candidate_limit]
+
+        if self.reranker is not None and ranked_results:
+            ranked_results = await asyncio.to_thread(
+                self.reranker.rerank,
+                query,
+                ranked_results,
+            )
+
+        ranked_results = ranked_results[:result_limit]
 
         # Expand retrieved articles with their neighboring chunks.
         article_keys: list[tuple[UUID, str]] = []
