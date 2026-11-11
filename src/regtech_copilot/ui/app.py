@@ -67,12 +67,17 @@ def render_sidebar() -> tuple[APIClient, str]:
 
 
 def render_upload_page(client: APIClient) -> None:
-    """Render the PDF upload and ingestion page."""
+    """Render document upload and catalog management."""
     st.title("📄 Gerenciar documentos")
     st.write(
-        "Envie documentos regulatórios em PDF para processamento e "
-        "indexação na base de conhecimento."
+        "Envie documentos regulatórios em PDF, consulte os documentos "
+        "indexados e gerencie sua base de conhecimento."
     )
+
+    if message := st.session_state.pop("document_action_message", None):
+        st.success(message)
+
+    st.subheader("Enviar documento")
 
     uploaded_file = st.file_uploader(
         "Selecione um documento PDF",
@@ -82,43 +87,142 @@ def render_upload_page(client: APIClient) -> None:
         "e geração de embeddings.",
     )
 
-    if uploaded_file is None:
-        st.info("Selecione um arquivo PDF para iniciar o processamento.")
-        return
+    if uploaded_file is not None:
+        st.write(f"**Arquivo selecionado:** {uploaded_file.name}")
+        st.caption(f"Tamanho: {uploaded_file.size / (1024 * 1024):.2f} MB")
 
-    st.write(f"**Arquivo selecionado:** {uploaded_file.name}")
-    st.caption(f"Tamanho: {uploaded_file.size / (1024 * 1024):.2f} MB")
+        if st.button(
+            "Enviar e processar documento",
+            type="primary",
+            disabled=uploaded_file.size == 0,
+        ):
+            try:
+                with st.spinner(
+                    "Processando documento... Isso pode levar alguns minutos."
+                ):
+                    result = client.upload_document(
+                        filename=uploaded_file.name,
+                        file_content=uploaded_file.getvalue(),
+                    )
 
-    if st.button(
-        "Enviar e processar documento",
-        type="primary",
-        disabled=uploaded_file.size == 0,
-    ):
-        try:
-            with st.spinner("Processando documento... Isso pode levar alguns minutos."):
-                result = client.upload_document(
-                    filename=uploaded_file.name,
-                    file_content=uploaded_file.getvalue(),
+                st.success("Documento processado e indexado com sucesso!")
+
+                col1, col2, col3 = st.columns(3)
+                col1.metric("Páginas", result["page_count"])
+                col2.metric("Chunks criados", result["chunks_created"])
+                col3.metric(
+                    "Dimensões dos embeddings",
+                    result["embedding_dimensions"],
                 )
 
-            st.success("Documento processado e indexado com sucesso!")
+                st.write(f"**Documento:** {result['filename']}")
+                st.write(f"**ID:** `{result['document_id']}`")
+                st.write(f"**Modelo de embedding:** `{result['embedding_model']}`")
 
-            col1, col2, col3 = st.columns(3)
-            col1.metric("Páginas", result["page_count"])
-            col2.metric("Chunks criados", result["chunks_created"])
-            col3.metric("Dimensões dos embeddings", result["embedding_dimensions"])
+            except APIClientError as exc:
+                st.error("Não foi possível processar o documento.")
+                st.warning(str(exc))
 
-            st.write(f"**Documento:** {result['filename']}")
-            st.write(f"**ID:** `{result['document_id']}`")
-            st.write(f"**Modelo de embedding:** `{result['embedding_model']}`")
+            except (KeyError, TypeError) as exc:
+                st.error("A API retornou dados incompletos ou inesperados.")
+                st.caption(str(exc))
 
-        except APIClientError as exc:
-            st.error("Não foi possível processar o documento.")
-            st.warning(str(exc))
+    st.divider()
+    st.subheader("Documentos indexados")
 
-        except (KeyError, TypeError) as exc:
-            st.error("A API retornou dados incompletos ou inesperados.")
-            st.caption(str(exc))
+    if st.button("🔄 Atualizar lista", key="refresh_documents"):
+        st.rerun()
+
+    try:
+        with st.spinner("Carregando documentos..."):
+            catalog = client.list_documents()
+
+        documents = catalog.get("documents", [])
+        total = catalog.get("total", len(documents))
+
+        st.metric("Total de documentos", total)
+
+        if not documents:
+            st.info("Nenhum documento indexado.")
+            return
+
+        for document in documents:
+            document_id = document["document_id"]
+            filename = document["filename"]
+
+            with st.expander(f"📄 {filename}"):
+                col1, col2 = st.columns(2)
+                col1.metric(
+                    "Páginas",
+                    document.get("page_count") or "—",
+                )
+                col2.metric(
+                    "Chunks",
+                    document.get("chunks_created", 0),
+                )
+
+                st.caption(f"ID: `{document_id}`")
+                st.caption(
+                    f"Cadastrado em: {document.get('created_at', 'Não informado')}"
+                )
+
+                if document.get("file_exists", False):
+                    st.success("Arquivo PDF disponível")
+                else:
+                    st.warning("Arquivo PDF não encontrado no armazenamento")
+
+                if st.button(
+                    "Ver detalhes completos",
+                    key=f"details_{document_id}",
+                ):
+                    try:
+                        details = client.get_document(document_id)
+                        st.session_state[f"document_details_{document_id}"] = details
+                    except APIClientError as exc:
+                        st.error(f"Não foi possível carregar os detalhes: {exc}")
+
+                cached_details: Any = st.session_state.get(
+                    f"document_details_{document_id}"
+                )
+
+                if isinstance(cached_details, dict):
+                    st.json(cached_details)
+
+                confirm = st.checkbox(
+                    "Confirmo que desejo excluir este documento e seus índices.",
+                    key=f"confirm_delete_{document_id}",
+                )
+
+                if st.button(
+                    "🗑️ Excluir documento",
+                    key=f"delete_{document_id}",
+                    disabled=not confirm,
+                    type="secondary",
+                ):
+                    try:
+                        with st.spinner("Excluindo documento e índices..."):
+                            client.delete_document(document_id)
+
+                        st.session_state["document_action_message"] = (
+                            f"Documento '{filename}' excluído com sucesso."
+                        )
+                        st.session_state.pop(
+                            f"confirm_delete_{document_id}",
+                            None,
+                        )
+                        st.session_state.pop(
+                            f"document_details_{document_id}",
+                            None,
+                        )
+                        st.rerun()
+
+                    except APIClientError as exc:
+                        st.error("Não foi possível excluir o documento.")
+                        st.warning(str(exc))
+
+    except APIClientError as exc:
+        st.error("Não foi possível carregar o catálogo de documentos.")
+        st.warning(str(exc))
 
 
 def render_source(source: dict[str, Any]) -> None:

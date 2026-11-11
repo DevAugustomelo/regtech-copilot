@@ -116,3 +116,15 @@ class APIClient:
             "/query",
             json=payload,
         )
+
+    def list_documents(self) -> dict[str, Any]:
+        """List all indexed documents."""
+        return self._request("GET", "/documents")
+
+    def get_document(self, document_id: str) -> dict[str, Any]:
+        """Retrieve details for one indexed document."""
+        return self._request("GET", f"/documents/{document_id}")
+
+    def delete_document(self, document_id: str) -> dict[str, Any]:
+        """Delete a document and its associated indexes."""
+        return self._request("DELETE", f"/documents/{document_id}")
