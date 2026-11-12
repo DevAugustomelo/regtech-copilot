@@ -1,0 +1,100 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: regtech-ollama
+    restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 10s
+
+  ollama-init:
+    image: ollama/ollama:latest
+    container_name: regtech-ollama-init
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["ollama pull nomic-embed-text"]
+    restart: "no"
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: regtech-api
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      APP_ENV: production
+      API_HOST: 0.0.0.0
+      API_PORT: 8000
+      EMBEDDING_BASE_URL: http://ollama:11434
+      VECTOR_STORE_PATH: data/vector_store
+      DOCUMENTS_PATH: data/documents
+    command:
+      [
+        "uvicorn",
+        "regtech_copilot.api.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000"
+      ]
+    volumes:
+      - vector_store:/app/data/vector_store
+      - documents:/app/data/documents
+    depends_on:
+      ollama-init:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:8000:8000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)"
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  ui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: regtech-ui
+    restart: unless-stopped
+    environment:
+      API_BASE_URL: http://api:8000
+      STREAMLIT_HOST: 0.0.0.0
+      STREAMLIT_PORT: 8501
+    command:
+      [
+        "streamlit",
+        "run",
+        "src/regtech_copilot/ui/app.py",
+        "--server.address=0.0.0.0",
+        "--server.port=8501",
+        "--server.headless=true"
+      ]
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "8501:8501"
+
+volumes:
+  ollama_data:
+  vector_store:
+  documents:
